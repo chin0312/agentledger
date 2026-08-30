@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities privately to the repository maintainers before opening a public issue. Include the affected endpoint or file, reproduction steps, impact and a suggested mitigation when available. Do not include credentials, private keys or other sensitive material in the report.
+Please use GitHub's private [Report a vulnerability](https://github.com/chin0312/agentledger/security/advisories/new) flow from the repository Security tab before opening a public issue. Include the affected endpoint or file, reproduction steps, impact and a suggested mitigation when available. Do not include credentials, private keys or other sensitive material in the report. If the private reporting form is unavailable, open a minimal public issue asking maintainers for a secure contact path without including exploit details.
 
 ## Credential handling
 

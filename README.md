@@ -1,24 +1,29 @@
 # AgentLedger
 
-**The financial control plane for autonomous agents.**
+<p align="center">
+  <img src="docs/assets/agentledger.png" alt="AgentLedger" width="180" />
+</p>
+
+<p align="center"><strong>The financial control plane for autonomous agents.</strong></p>
+
+<p align="center">Financial state and policy in; machine-readable recommendations and capital decisions out.</p>
+
+<p align="center">
+  <a href="https://github.com/chin0312/agentledger/actions/workflows/ci.yml"><img src="https://github.com/chin0312/agentledger/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
+</p>
 
 > Financial execution requires financial governance.
 
-AgentLedger converts financial state and policy into machine-readable recommendations and capital decisions for autonomous agents. It is an API-only, deterministic, explainable service that sits between agent intent and capital movement.
+Autonomous agents can already spend, trade and purchase services. AgentLedger provides the deterministic, explainable financial decision layer between agent intent and capital movement.
 
-```text
-Calling agent
-    ↓
-financial state + proposed action + policy
-    ↓
-AgentLedger
-    ↓
-normalize → analyze → evaluate policy
-    ↓
-recommendation / APPROVE / CAUTION / REJECT
-```
+| Service | Question | Price |
+| --- | --- | --- |
+| Financial Health | How am I? | Free |
+| Recommendations | What should I do next? | 0.01 USDT/call |
+| Policy Guard | Should this capital move? | 0.02 USDT/call |
 
-Autonomous agents can already spend, trade and purchase services. AgentLedger supplies the financial decision layer that helps them understand operating health and govern spending before money moves.
+Quick links: [Production API](https://agentledger-one.vercel.app) · [OpenAPI](https://agentledger-one.vercel.app/openapi.json) · [GitHub](https://github.com/chin0312/agentledger) · [OKX.AI ASP #11336](https://www.okx.ai/agents/11336)
 
 AgentLedger is not a wallet, accounting system, tax system, investment adviser, portfolio manager, trading bot or execution engine. It never signs or executes capital movement.
 
@@ -41,15 +46,6 @@ AgentLedger is not a wallet, accounting system, tax system, investment adviser, 
 **Should this capital move?**
 
 `POST /api/evaluate-action` evaluates `service_purchase` and `capital_allocation` actions against caller-supplied financial state and policy. It returns an explainable `approve`, `caution` or `reject` decision. The hosted route uses x402 on X Layer.
-
-Compatibility primitives remain available and free:
-
-```text
-POST /api/can-i-spend
-POST /api/can-i-allocate
-```
-
-They are not initial Marketplace services.
 
 ## Agent-native architecture
 
@@ -106,6 +102,17 @@ curl -X POST http://localhost:3000/api/demo/company-health \
 ```
 
 The seeded company has marketplace, research-service and client inflows, repeated payments to agent vendors, stablecoin activity across USDT/USDC/USDG, spend acceleration and one failed transaction.
+
+## Compatibility API
+
+The original specialist primitives remain available and free for compatibility:
+
+```text
+POST /api/can-i-spend
+POST /api/can-i-allocate
+```
+
+They are not initial Marketplace services; use Policy Guard for the Marketplace-facing generalized control flow.
 
 ## API examples
 
