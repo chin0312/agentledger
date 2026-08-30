@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+.env*
+!.env.example
+*.tsbuildinfo
+.DS_Store
+.vercel
+*.pem
+*.key
+*.p12
+*.pfx
+*.seed
+*mnemonic*
