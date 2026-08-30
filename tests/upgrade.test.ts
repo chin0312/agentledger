@@ -421,7 +421,7 @@ test("recommendations report contains a concise summary and at most three action
     ], 100),
     new Date(NOW).toISOString(),
   );
-  assert.equal(result.version, "0.3.3");
+  assert.equal(result.version, "0.3.4");
   assert.ok(result.executiveSummary.length > 0);
   assert.ok(result.recommendedActions.length <= 3);
 });

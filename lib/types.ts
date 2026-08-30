@@ -1,5 +1,5 @@
 export const APP_NAME = "AgentLedger" as const;
-export const APP_VERSION = "0.3.3" as const;
+export const APP_VERSION = "0.3.4" as const;
 
 export const SUPPORTED_ASSETS = ["USDT", "USDC", "USDG"] as const;
 
