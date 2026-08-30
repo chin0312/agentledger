@@ -220,6 +220,8 @@ The complete machine-readable contract is available at [`/openapi.json`](https:/
 
 AgentLedger is open source and can be self-hosted. The hosted AgentLedger ASP provides a maintained, production-ready machine-to-machine service with x402 payment and OKX.AI discovery for agents that prefer direct access over operating their own deployment.
 
+Source repository: [github.com/chin0312/agentledger](https://github.com/chin0312/agentledger)
+
 ## Payment model
 
 AgentLedger uses x402 v2 on X Layer mainnet:
