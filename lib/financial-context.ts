@@ -176,7 +176,9 @@ export function normalizeTransactionState(options: {
   }
 
   const failedProviders = new Map<string, { provider: string; transactions: number }>();
-  for (const transaction of relevantTransactions.filter((item) => item.status === "failed")) {
+  for (const transaction of relevantTransactions.filter(
+    (item) => item.status === "failed" && item.direction === "outgoing",
+  )) {
     const key = transaction.counterparty.trim().toLowerCase();
     const existing = failedProviders.get(key);
     if (existing) {
@@ -198,8 +200,8 @@ export function normalizeTransactionState(options: {
     periodDays: options.periodDays,
     inflows: successfulIncoming.reduce((sum, transaction) => sum + transaction.amount, 0),
     outflows: successfulOutgoing.reduce((sum, transaction) => sum + transaction.amount, 0),
-    incomingTransactions: relevantTransactions.filter((transaction) => transaction.direction === "incoming").length,
-    outgoingTransactions: relevantTransactions.filter((transaction) => transaction.direction === "outgoing").length,
+    incomingTransactions: successfulIncoming.length,
+    outgoingTransactions: successfulOutgoing.length,
     failedTransactions: relevantTransactions.filter((transaction) => transaction.status === "failed").length,
     firstHalfSpend,
     secondHalfSpend,
