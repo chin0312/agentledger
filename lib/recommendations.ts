@@ -1,12 +1,14 @@
 import type {
   CompanyHealthReport,
   FinancialRecommendation,
+  FinancialRiskSignalType,
   FinancialStatus,
   FinancialPolicy,
   RecommendationsReport,
 } from "./types";
 import { APP_NAME, APP_VERSION } from "./types";
 import { resolveFinancialPolicy } from "./policy";
+import { deriveFinancialRiskSignals } from "./risk";
 
 type Candidate = {
   score: number;
@@ -23,65 +25,36 @@ function display(value: number): string {
   return round(value).toFixed(2).replace(/\.00$/, "");
 }
 
-function percentage(value: number, total: number): number {
-  if (total <= 0) {
-    return 0;
-  }
-
-  return round((value / total) * 100);
-}
-
 function severityScore(severity: FinancialRecommendation["severity"]): number {
   return { critical: 100, high: 70, medium: 40, low: 20 }[severity];
 }
 
 export function getFinancialStatus(report: CompanyHealthReport, policy?: FinancialPolicy): FinancialStatus {
-  const resolved = resolveFinancialPolicy(policy);
-  const budgetPct = report.budget?.usedPct ?? 0;
-  const concentrationPct = report.topCounterparties[0]?.shareOfSpendPct ?? 0;
-  const hardConcentrationPct = Math.min(100, resolved.maxProviderConcentrationPct + 15);
-  const hasCriticalRisk = budgetPct > resolved.criticalBudgetUtilizationPct || concentrationPct > hardConcentrationPct;
-
-  if (hasCriticalRisk) {
+  const signals = deriveFinancialRiskSignals(report, policy);
+  if (signals.some((signal) => signal.severity === "critical")) {
     return "critical";
   }
-
-  const hasModerateRisk =
-    budgetPct > resolved.cautionBudgetUtilizationPct ||
-    concentrationPct > resolved.maxProviderConcentrationPct ||
-    report.spendVelocity.changePct > 50 ||
-    report.cashFlow.net < 0 ||
-    report.transactions.failed > 0;
-
-  return hasModerateRisk ? "caution" : "healthy";
+  return signals.length > 0 ? "caution" : "healthy";
 }
 
 function buildExecutiveSummary(report: CompanyHealthReport, status: FinancialStatus, policy?: FinancialPolicy): string {
-  const resolved = resolveFinancialPolicy(policy);
-  const hardConcentrationPct = Math.min(100, resolved.maxProviderConcentrationPct + 15);
   if (status === "healthy") {
     return "Financial activity is healthy, with controlled spending and no material budget, concentration, cash-flow, or velocity risks identified.";
   }
 
   const drivers: string[] = [];
-  if ((report.budget?.usedPct ?? 0) > resolved.criticalBudgetUtilizationPct) {
-    drivers.push("critical budget utilization");
-  } else if ((report.budget?.usedPct ?? 0) > resolved.cautionBudgetUtilizationPct) {
-    drivers.push("elevated budget utilization");
-  }
-  if ((report.topCounterparties[0]?.shareOfSpendPct ?? 0) > hardConcentrationPct) {
-    drivers.push("high provider concentration");
-  } else if ((report.topCounterparties[0]?.shareOfSpendPct ?? 0) > resolved.maxProviderConcentrationPct) {
-    drivers.push("provider concentration");
-  }
-  if (report.cashFlow.net < 0) {
-    drivers.push("negative operating cash flow");
-  }
-  if (report.spendVelocity.changePct > 50) {
-    drivers.push("accelerating spend");
-  }
-  if (report.transactions.failed > 0) {
-    drivers.push("failed transactions");
+  for (const signal of deriveFinancialRiskSignals(report, policy)) {
+    drivers.push(
+      signal.type === "budget_utilization"
+        ? signal.severity === "critical" ? "critical budget utilization" : "elevated budget utilization"
+        : signal.type === "provider_concentration"
+          ? signal.severity === "critical" ? "high provider concentration" : "provider concentration"
+          : signal.type === "negative_cash_flow"
+            ? "negative operating cash flow"
+            : signal.type === "spend_acceleration"
+              ? "accelerating spend"
+              : "failed transactions",
+    );
   }
 
   const driverText = drivers.length > 0 ? drivers.slice(0, 3).join(", ") : "moderate financial-control signals";
@@ -100,62 +73,50 @@ function addCandidate(candidates: Candidate[], order: number, recommendation: Om
 
 export function buildFinancialRecommendations(report: CompanyHealthReport, policy?: FinancialPolicy): FinancialRecommendation[] {
   const resolved = resolveFinancialPolicy(policy);
+  const riskSignals = deriveFinancialRiskSignals(report, policy);
   const cautionBudgetPct = resolved.cautionBudgetUtilizationPct;
-  const criticalBudgetPct = resolved.criticalBudgetUtilizationPct;
   const providerLimitPct = resolved.maxProviderConcentrationPct;
-  const hardProviderLimitPct = Math.min(100, providerLimitPct + 15);
   const reservePct = resolved.reservePct;
   const candidates: Candidate[] = [];
   let order = 0;
   const budget = report.budget;
   const largestCounterparty = report.topCounterparties[0];
+  const riskFor = (type: FinancialRiskSignalType) => riskSignals.find((signal) => signal.type === type);
 
-  if (budget && budget.usedPct > criticalBudgetPct) {
+  if (budget && riskFor("budget_utilization")) {
+    const budgetRisk = riskFor("budget_utilization");
+    const isCritical = budgetRisk?.severity === "critical";
     addCandidate(
       candidates,
       order++,
       {
         type: "reduce_budget_pressure",
-        severity: "critical",
-        title: "Reduce discretionary spending immediately",
+        severity: isCritical ? "critical" : "high",
+        title: isCritical ? "Reduce discretionary spending immediately" : "Protect remaining operating budget",
         finding: `Normalized monthly spend is ${display(budget.usedPct)}% of the configured budget.`,
-        implication: "The operating plan is close to exhausting its approved spending capacity.",
-        recommendation: "Freeze or sharply reduce discretionary spending until budget utilization returns below a safer threshold.",
+        implication: isCritical
+          ? "The operating plan is close to exhausting its approved spending capacity."
+          : "Only a limited share of the approved monthly budget remains for non-essential work.",
+        recommendation: isCritical
+          ? "Freeze or sharply reduce discretionary spending until budget utilization returns below a safer threshold."
+          : "Prioritize essential services and reduce discretionary spending.",
         action: {
           type: "set_monthly_spend_cap",
-          recommendedValue: round(budget.limit * (1 - reservePct / 100)),
+          recommendedValue: isCritical ? round(budget.limit * (1 - reservePct / 100)) : round(budget.limit * (cautionBudgetPct / 100)),
           unit: "USD per month",
         },
-        target: { metric: "budgetUtilizationPct", current: budget.usedPct, desired: round(100 - reservePct) },
-        expectedImpact: "Create budget headroom and restore a more resilient operating reserve.",
+        target: { metric: "budgetUtilizationPct", current: budget.usedPct, desired: isCritical ? round(100 - reservePct) : cautionBudgetPct },
+        expectedImpact: isCritical
+          ? "Create budget headroom and restore a more resilient operating reserve."
+          : "Preserve budget capacity for essential operating activity.",
       },
-      budget.usedPct - criticalBudgetPct,
-    );
-  } else if (budget && budget.usedPct > cautionBudgetPct) {
-    addCandidate(
-      candidates,
-      order++,
-      {
-        type: "reduce_budget_pressure",
-        severity: "high",
-        title: "Protect remaining operating budget",
-        finding: `Normalized monthly spend is ${display(budget.usedPct)}% of the configured budget.`,
-        implication: "Only a limited share of the approved monthly budget remains for non-essential work.",
-        recommendation: "Prioritize essential services and reduce discretionary spending.",
-        action: {
-          type: "set_monthly_spend_cap",
-          recommendedValue: round(budget.limit * (cautionBudgetPct / 100)),
-          unit: "USD per month",
-        },
-        target: { metric: "budgetUtilizationPct", current: budget.usedPct, desired: cautionBudgetPct },
-        expectedImpact: "Preserve budget capacity for essential operating activity.",
-      },
-      budget.usedPct - cautionBudgetPct,
+      Math.max(0, budget.usedPct - (budgetRisk?.threshold ?? cautionBudgetPct)),
     );
   }
 
-  if (largestCounterparty && largestCounterparty.shareOfSpendPct > providerLimitPct) {
-    const isCritical = largestCounterparty.shareOfSpendPct > hardProviderLimitPct;
+  const concentrationRisk = riskFor("provider_concentration");
+  if (largestCounterparty && concentrationRisk) {
+    const isCritical = concentrationRisk.severity === "critical";
     addCandidate(
       candidates,
       order++,
@@ -185,8 +146,9 @@ export function buildFinancialRecommendations(report: CompanyHealthReport, polic
     );
   }
 
-  if (report.spendVelocity.changePct > 50 && report.spendVelocity.secondHalf > report.spendVelocity.firstHalf) {
-    const isCritical = report.spendVelocity.changePct > 100;
+  const accelerationRisk = riskFor("spend_acceleration");
+  if (accelerationRisk) {
+    const isCritical = accelerationRisk.severity === "critical";
     const temporaryCap = report.spendVelocity.firstHalf > 0 ? round(report.spendVelocity.firstHalf * 1.5) : 0;
     addCandidate(
       candidates,
@@ -210,7 +172,7 @@ export function buildFinancialRecommendations(report: CompanyHealthReport, polic
     );
   }
 
-  if (report.cashFlow.net < 0) {
+  if (riskFor("negative_cash_flow")) {
     const deficit = round(Math.abs(report.cashFlow.net));
     addCandidate(
       candidates,
@@ -259,7 +221,7 @@ export function buildFinancialRecommendations(report: CompanyHealthReport, polic
     );
   }
 
-  if (report.transactions.failed > 0) {
+  if (riskFor("failed_transactions")) {
     const failedProvider = report.failedCounterparties[0];
     const providerText = failedProvider && failedProvider.transactions > 1
       ? ` Multiple failures share provider ${failedProvider.address}.`
@@ -282,8 +244,8 @@ export function buildFinancialRecommendations(report: CompanyHealthReport, polic
   }
 
   const budgetIsLow = budget && budget.usedPct <= cautionBudgetPct;
-  const concentrationIsHealthy = !largestCounterparty || largestCounterparty.shareOfSpendPct <= providerLimitPct;
-  const velocityIsHealthy = report.spendVelocity.changePct <= 50;
+  const concentrationIsHealthy = !riskFor("provider_concentration");
+  const velocityIsHealthy = !riskFor("spend_acceleration");
   if (report.cashFlow.net > 0 && budgetIsLow && concentrationIsHealthy && velocityIsHealthy) {
     const reserveTarget = round((budget?.limit ?? 0) * (reservePct / 100));
     const availableCapacity = round(Math.max(0, (budget?.limit ?? 0) * (1 - reservePct / 100) - (budget?.normalizedUsed ?? 0)));

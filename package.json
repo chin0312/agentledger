@@ -1,10 +1,11 @@
 {
   "name": "agentledger",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "description": "The financial control plane for autonomous agents.",
   "scripts": {
-    "dev": "WATCHPACK_POLLING=true next dev",
+    "dev": "next dev",
+    "dev:poll": "WATCHPACK_POLLING=true next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",

@@ -1,5 +1,5 @@
 export const APP_NAME = "AgentLedger" as const;
-export const APP_VERSION = "0.3.2" as const;
+export const APP_VERSION = "0.3.3" as const;
 
 export const SUPPORTED_ASSETS = ["USDT", "USDC", "USDG"] as const;
 
@@ -66,20 +66,41 @@ export type ProvidedFinancialState = {
   cashFlow: {
     inflows: number;
     outflows: number;
+    /** Successful incoming transactions in the selected period. */
     incomingTransactions?: number;
+    /** Successful outgoing provider transactions in the selected period. */
     outgoingTransactions?: number;
   };
   spendVelocity?: {
+    /** Spend observed in the first half of the selected period. */
     firstHalf: number;
+    /** Spend observed in the second half of the selected period. */
     secondHalf: number;
   };
   providers?: Array<{
     provider: string;
+    /** Successful outgoing payments to this provider. */
     spend: number;
     transactions: number;
+    /** Failed outgoing attempts; separate from successful transactions. */
     failedTransactions?: number;
   }>;
+  /** Total failed transactions, including failures outside the provider subset. */
   failedTransactions?: number;
+};
+
+export type FinancialRiskSignalType =
+  | "budget_utilization"
+  | "provider_concentration"
+  | "spend_acceleration"
+  | "negative_cash_flow"
+  | "failed_transactions";
+
+export type FinancialRiskSignal = {
+  type: FinancialRiskSignalType;
+  severity: "critical" | "high" | "medium";
+  metric: number;
+  threshold: number;
 };
 
 export type CompanyHealthRequest = {

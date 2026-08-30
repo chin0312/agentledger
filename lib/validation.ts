@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { FINANCIAL_STATE_TOLERANCE, MAX_AGGREGATE_TRANSACTION_COUNT } from "./financial-context";
 import { financialPolicySchema, MAX_FINANCIAL_VALUE } from "./policy";
 
 const daysSchema = z.number().int("days must be an integer").min(1, "days must be at least 1").max(90, "days must be at most 90");
@@ -35,22 +36,59 @@ const providedFinancialStateSchema = z
             transactions: transactionCountSchema("financialState.providers.transactions"),
             failedTransactions: transactionCountSchema("financialState.providers.failedTransactions").optional(),
           })
-          .strict()
-          .superRefine((provider, context) => {
-            if ((provider.failedTransactions ?? 0) > provider.transactions) {
-              context.addIssue({
-                code: z.ZodIssueCode.custom,
-                path: ["failedTransactions"],
-                message: "financialState.providers.failedTransactions must not exceed transactions",
-              });
-            }
-          }),
+          .strict(),
       )
       .max(100, "financialState.providers must contain at most 100 entries")
       .optional(),
     failedTransactions: transactionCountSchema("financialState.failedTransactions").optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((state, context) => {
+    const providers = state.providers ?? [];
+    const providerSpendTotal = providers.reduce((sum, provider) => sum + provider.spend, 0);
+    if (providerSpendTotal > state.cashFlow.outflows + FINANCIAL_STATE_TOLERANCE) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["providers"],
+        message: "financialState.providers.spend total must not exceed cashFlow.outflows",
+      });
+    }
+
+    const providerSuccessfulTransactionTotal = providers.reduce((sum, provider) => sum + provider.transactions, 0);
+    if (providerSuccessfulTransactionTotal > MAX_AGGREGATE_TRANSACTION_COUNT) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["providers"],
+        message: "financialState provider transaction totals are unreasonably large",
+      });
+    }
+    if (
+      state.cashFlow.outgoingTransactions !== undefined &&
+      providerSuccessfulTransactionTotal > state.cashFlow.outgoingTransactions
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cashFlow", "outgoingTransactions"],
+        message: "financialState.providers.transactions total must not exceed cashFlow.outgoingTransactions",
+      });
+    }
+
+    const providerFailedTotal = providers.reduce((sum, provider) => sum + (provider.failedTransactions ?? 0), 0);
+    if (providerFailedTotal > MAX_AGGREGATE_TRANSACTION_COUNT) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["providers"],
+        message: "financialState provider failed transaction totals are unreasonably large",
+      });
+    }
+    if (state.failedTransactions !== undefined && state.failedTransactions < providerFailedTotal) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["failedTransactions"],
+        message: "financialState.failedTransactions must include all provider failedTransactions",
+      });
+    }
+  });
 
 export const companyHealthSchema = z
   .object({

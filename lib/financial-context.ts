@@ -1,5 +1,8 @@
 import type { NormalizedTransaction, ProvidedFinancialState } from "./types";
 
+export const FINANCIAL_STATE_TOLERANCE = 0.01;
+export const MAX_AGGREGATE_TRANSACTION_COUNT = 1_000_000;
+
 export type NormalizedProviderState = {
   provider: string;
   spend: number;
@@ -83,12 +86,33 @@ export function normalizeFinancialState(state: ProvidedFinancialState): Normaliz
     }
   }
 
-  const failedTransactions = state.failedTransactions ?? 0;
+  const providerSpendTotal = [...providers.values()].reduce((sum, provider) => sum + provider.spend, 0);
+  if (providerSpendTotal > state.cashFlow.outflows + FINANCIAL_STATE_TOLERANCE) {
+    throw new Error("financialState.providers.spend total must not exceed cashFlow.outflows");
+  }
+
+  const providerSuccessfulTransactionTotal = [...providers.values()].reduce((sum, provider) => sum + provider.transactions, 0);
+  if (state.cashFlow.outgoingTransactions !== undefined && providerSuccessfulTransactionTotal > state.cashFlow.outgoingTransactions) {
+    throw new Error("financialState.providers.transactions total must not exceed cashFlow.outgoingTransactions");
+  }
+  if (providerSuccessfulTransactionTotal > MAX_AGGREGATE_TRANSACTION_COUNT) {
+    throw new Error("financialState provider transaction totals are unreasonably large");
+  }
+
+  const providerFailedTotal = [...providers.values()].reduce((sum, provider) => sum + provider.failedTransactions, 0);
+  if (providerFailedTotal > MAX_AGGREGATE_TRANSACTION_COUNT) {
+    throw new Error("financialState provider failed transaction totals are unreasonably large");
+  }
+  if (state.failedTransactions !== undefined && state.failedTransactions < providerFailedTotal) {
+    throw new Error("financialState.failedTransactions must include all provider failedTransactions");
+  }
+
+  const failedTransactions = state.failedTransactions ?? providerFailedTotal;
   assertCount(failedTransactions, "failedTransactions");
   const incomingTransactions = state.cashFlow.incomingTransactions ?? (state.cashFlow.inflows > 0 ? 1 : 0);
   const outgoingTransactions = state.cashFlow.outgoingTransactions ?? (
     providers.size > 0
-      ? [...providers.values()].reduce((sum, provider) => sum + provider.transactions, 0)
+      ? providerSuccessfulTransactionTotal
       : state.cashFlow.outflows > 0
         ? 1
         : 0
